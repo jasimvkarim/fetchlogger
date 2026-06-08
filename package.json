@@ -6,7 +6,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jasimvk/fetchlogger.git"
+    "url": "git+https://github.com/jasimvkarim/fetchlogger.git"
   },
   "keywords": ["fetch", "logger", "devtools", "debug", "network", "react", "panel"],
   "type": "module",
