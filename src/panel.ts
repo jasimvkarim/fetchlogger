@@ -8,10 +8,20 @@ import {
   clearLogs,
   type InstallOptions,
 } from "./core";
+import {
+  installConsoleLogger,
+  subscribeConsole,
+  getConsoleLogs,
+  clearConsoleLogs,
+  type ConsoleLevel,
+  type ConsoleOptions,
+} from "./console";
 
-export interface MountOptions extends InstallOptions {
+export interface MountOptions extends InstallOptions, ConsoleOptions {
   /** Auto-install the fetch patch when mounting. Default true. */
   autoInstall?: boolean;
+  /** Also capture console.log/info/warn/error/debug into a Console tab. Default true. */
+  captureConsole?: boolean;
   /** Start expanded. Default false (collapsed). */
   defaultOpen?: boolean;
   /** Where the panel anchors. Default "bottom-center". */
@@ -19,6 +29,14 @@ export interface MountOptions extends InstallOptions {
   /** Element to append the panel to. Default document.body. */
   container?: HTMLElement;
 }
+
+const consoleLevelColor = (level: ConsoleLevel) => {
+  if (level === "error") return "#fca5a5";
+  if (level === "warn") return "#fcd34d";
+  if (level === "info") return "#93c5fd";
+  if (level === "debug") return "#c4b5fd";
+  return "#e2e8f0";
+};
 
 const statusColor = (status?: number) => {
   if (!status) return "#9ca3af";
@@ -44,12 +62,15 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
 
   const uninstall =
     options.autoInstall === false ? () => {} : installFetchLogger(options);
+  const uninstallConsole =
+    options.captureConsole === false ? () => {} : installConsoleLogger(options);
 
   const container = options.container || document.body;
   let open = options.defaultOpen ?? false;
   let hidden = false;
   let selected: number | null = null;
   let filter = "";
+  let tab: "network" | "console" = "network";
 
   const root = el("div", {
     position: "fixed",
@@ -78,6 +99,7 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
   const render = () => {
     root.innerHTML = "";
     const logs = getLogs();
+    const clogs = getConsoleLogs();
 
     if (hidden) {
       root.style.width = "auto";
@@ -85,7 +107,7 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
       const pill = el("button", {
         all: "unset", cursor: "pointer", padding: "6px 12px",
         color: "#a5b4fc", fontWeight: "bold", display: "block",
-      } as any, `🛰 ${logs.length}`);
+      } as any, `🛰 ${logs.length + clogs.length}`);
       pill.title = "Open Fetch Logger";
       pill.onclick = () => { hidden = false; open = true; render(); };
       root.appendChild(pill);
@@ -102,12 +124,32 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
       display: "flex", alignItems: "center", gap: "8px",
       padding: "6px 10px", background: "rgba(30,41,59,0.8)", flexShrink: "0",
     });
-    header.appendChild(el("span", { color: "#a5b4fc", fontWeight: "bold", fontSize: "12px" }, "🛰 Fetch Logger"));
-    header.appendChild(el("span", { color: "#94a3b8", fontSize: "10px" }, `${logs.length} req${logs.length !== 1 ? "s" : ""}`));
+    header.appendChild(el("span", { color: "#a5b4fc", fontWeight: "bold", fontSize: "12px" }, "🛰"));
+
+    // Tab switch
+    const tabWrap = el("div", { display: "flex", gap: "2px", background: "rgba(15,23,42,0.6)", borderRadius: "6px", padding: "2px" });
+    const mkTab = (id: "network" | "console", label: string, count: number) => {
+      const active = tab === id;
+      const btn = el("span", {
+        cursor: "pointer", fontSize: "10px", fontWeight: "bold", padding: "2px 8px", borderRadius: "4px",
+        color: active ? "#0f172a" : "#cbd5e1", background: active ? "#a5b4fc" : "transparent",
+      }, `${label} ${count}`);
+      btn.onclick = (e) => { e.stopPropagation(); tab = id; selected = null; render(); };
+      return btn;
+    };
+    tabWrap.appendChild(mkTab("network", "Network", logs.length));
+    tabWrap.appendChild(mkTab("console", "Console", clogs.length));
+    header.appendChild(tabWrap);
+
     const ctrls = el("div", { marginLeft: "auto", display: "flex", gap: "8px", alignItems: "center" });
     if (open) {
       const clearBtn = el("span", { color: "#cbd5e1", cursor: "pointer" }, "✕ clear");
-      clearBtn.onclick = (e) => { e.stopPropagation(); clearLogs(); selected = null; render(); };
+      clearBtn.onclick = (e) => {
+        e.stopPropagation();
+        if (tab === "console") clearConsoleLogs();
+        else { clearLogs(); selected = null; }
+        render();
+      };
       ctrls.appendChild(clearBtn);
     }
     const toggle = el("span", { color: "#cbd5e1", cursor: "pointer", fontSize: "13px" }, open ? "▼" : "▲");
@@ -122,6 +164,44 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
     root.appendChild(header);
 
     if (!open) return;
+
+    // ── Console tab ──
+    if (tab === "console") {
+      const consoleWrap = el("div", { display: "flex", flexDirection: "column", flex: "1", overflow: "hidden", minHeight: "0" });
+      const cFilterWrap = el("div", { padding: "4px 6px", borderBottom: "1px solid #334155", flexShrink: "0" });
+      const cInput = el("input", {
+        width: "100%", background: "#1e293b", border: "1px solid #475569",
+        borderRadius: "4px", color: "#f1f5f9", fontSize: "11px",
+        padding: "3px 6px", outline: "none", boxSizing: "border-box",
+      } as any) as HTMLInputElement;
+      cInput.placeholder = "filter console…";
+      cInput.value = filter;
+      cInput.oninput = () => { filter = cInput.value; render(); cInput.focus(); };
+      cFilterWrap.appendChild(cInput);
+      consoleWrap.appendChild(cFilterWrap);
+
+      const cRows = el("div", { overflowY: "auto", flex: "1" });
+      const cFiltered = filter
+        ? clogs.filter((l) => l.text.toLowerCase().includes(filter.toLowerCase()) || l.level.includes(filter.toLowerCase()))
+        : clogs;
+      if (cFiltered.length === 0) {
+        cRows.appendChild(el("div", { padding: "12px", color: "#94a3b8", textAlign: "center" }, "no console output yet"));
+      }
+      cFiltered.forEach((log) => {
+        const row = el("div", {
+          display: "flex", alignItems: "flex-start", gap: "6px",
+          padding: "4px 8px", borderBottom: "1px solid #1e293b",
+          background: log.level === "error" ? "rgba(127,29,29,0.25)" : log.level === "warn" ? "rgba(120,53,15,0.2)" : "transparent",
+        });
+        row.appendChild(el("span", { color: consoleLevelColor(log.level), fontSize: "9px", fontWeight: "bold", minWidth: "34px", textTransform: "uppercase", flexShrink: "0" }, log.level));
+        row.appendChild(el("span", { color: consoleLevelColor(log.level), fontSize: "10px", whiteSpace: "pre-wrap", wordBreak: "break-word", flex: "1" }, log.text));
+        cRows.appendChild(row);
+      });
+      consoleWrap.appendChild(cRows);
+      root.appendChild(consoleWrap);
+      cRows.scrollTop = cRows.scrollHeight;
+      return;
+    }
 
     const body = el("div", { display: "flex", flex: "1", overflow: "hidden", minHeight: "0" });
 
@@ -209,11 +289,14 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
   };
 
   const unsub = subscribe(() => render());
+  const unsubConsole = subscribeConsole(() => render());
   render();
 
   return () => {
     unsub();
+    unsubConsole();
     uninstall();
+    uninstallConsole();
     if (root.parentNode) root.parentNode.removeChild(root);
   };
 }

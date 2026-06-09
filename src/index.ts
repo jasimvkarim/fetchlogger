@@ -10,4 +10,16 @@ export {
   type InstallOptions,
 } from "./core";
 
+export {
+  installConsoleLogger,
+  uninstallConsoleLogger,
+  subscribeConsole,
+  getConsoleLogs,
+  clearConsoleLogs,
+  isConsoleInstalled,
+  type ConsoleLog,
+  type ConsoleLevel,
+  type ConsoleOptions,
+} from "./console";
+
 export { mountFetchLoggerPanel, type MountOptions } from "./panel";

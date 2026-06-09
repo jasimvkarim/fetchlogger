@@ -6,11 +6,13 @@
 [![license](https://img.shields.io/npm/l/@jasimvk/fetchlogger?color=lightgrey)](./LICENSE)
 [![types](https://img.shields.io/npm/types/@jasimvk/fetchlogger)](https://www.npmjs.com/package/@jasimvk/fetchlogger)
 
-A live, in-page **fetch logger panel** for debugging API calls — see every request/response without opening DevTools. Framework-agnostic core with an optional React wrapper.
+A live, in-page **debug panel** for the browser — see every `fetch()` request/response **and** your `console` output without opening DevTools. Framework-agnostic core with an optional React wrapper.
 
 - 🛰 Floating panel, collapsible, draggable position
-- 🔎 Filter by URL or API code
-- ↑↓ Click a request to inspect request + response bodies
+- 🌐 **Network tab** — every fetch with status, timing, and request/response bodies
+- 🖥️ **Console tab** — captures `console.log` / `info` / `warn` / `error` / `debug`
+- 🔎 Filter each tab; click a request to inspect it
+- 🔒 Auto-redacts secrets; nothing leaves the browser
 - ⚡ Zero dependencies in the core (React is an optional peer)
 - 🧩 Works in React, Vue, Svelte, or plain JS
 
@@ -64,6 +66,9 @@ const off = subscribe((log) => console.log(log.method, log.url, log.status));
 | `maxLogs` | `100` | Max logs kept in memory (FIFO). |
 | `getLabel` | — | Derive a short label from the parsed JSON body (e.g. an API code). |
 | `captureResponseBody` | `true` | Clone + read response bodies. |
+| `captureConsole` | `true` | Also capture console output into a Console tab (panel only). |
+| `maxConsoleLogs` | `200` | Max console entries kept in memory (FIFO). |
+| `levels` | all 5 | Console levels to capture: `log`, `info`, `warn`, `error`, `debug`. |
 | `autoRedact` | `true` | Auto-mask values whose key looks like a secret (`token`, `password`, `authorization`, `apiKey`, `secret`, `cookie`…). |
 | `redact` | — | `(log) => log` hook to strip/mask sensitive data before it is stored or shown. Runs after `autoRedact`. |
 | `maxBodyChars` | `20000` | Truncate captured request/response bodies longer than this. |
@@ -78,9 +83,11 @@ const off = subscribe((log) => console.log(log.method, log.url, log.status));
 - `mountFetchLoggerPanel(options?) => () => void` — mount the floating panel, returns unmount.
 - `installFetchLogger(options?) => () => void` — patch `fetch`, returns uninstall.
 - `uninstallFetchLogger()` — restore original `fetch`.
-- `subscribe(fn) => () => void` — listen to log events.
+- `subscribe(fn) => () => void` — listen to fetch log events.
 - `getLogs()` / `clearLogs()` / `isInstalled()`
-- Types: `FetchLog`, `InstallOptions`, `MountOptions`.
+- `installConsoleLogger(options?) => () => void` — capture console output (no UI).
+- `subscribeConsole(fn)` / `getConsoleLogs()` / `clearConsoleLogs()` / `uninstallConsoleLogger()`
+- Types: `FetchLog`, `ConsoleLog`, `ConsoleLevel`, `InstallOptions`, `ConsoleOptions`, `MountOptions`.
 
 ## How it works
 
