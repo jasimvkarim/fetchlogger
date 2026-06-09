@@ -6,7 +6,13 @@
 [![license](https://img.shields.io/npm/l/@jasimvk/fetchlogger?color=lightgrey)](./LICENSE)
 [![types](https://img.shields.io/npm/types/@jasimvk/fetchlogger)](https://www.npmjs.com/package/@jasimvk/fetchlogger)
 
+> A mini DevTools panel for debugging `fetch` requests **inside the browser** — no DevTools required.
+
+![Fetch Logger preview](https://raw.githubusercontent.com/jasimvkarim/fetchlogger/main/assets/fetchlogger-preview.png)
+
 A live, in-page **debug panel** for the browser — see every `fetch()` request/response **and** your `console` output without opening DevTools. Framework-agnostic core with an optional React wrapper.
+
+▶ **[Live demo on debugtools.org](https://debugtools.org/tools/fetch-logger/)**
 
 - 🛰 Floating panel — collapsible and **draggable** (grab the header)
 - 🌐 **Network tab** — every fetch with status, timing, and request/response bodies
