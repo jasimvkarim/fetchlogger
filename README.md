@@ -12,7 +12,7 @@ A live, in-page **debug panel** for the browser — see every `fetch()` request/
 - 🌐 **Network tab** — every fetch with status, timing, and request/response bodies
 - 🖥️ **Console tab** — captures `console.log` / `info` / `warn` / `error` / `debug`
 - 🔎 Filter each tab; click a request to inspect it
-- 📋 One-click **copy** for request body, response body, URL, and console lines
+- 📋 One-click **copy** — request body, response body, URL, console lines, or a full **Copy Debug Report** (method, URL, status, timing, bodies, console errors) for bug tickets
 - 🔒 Auto-redacts secrets; nothing leaves the browser
 - ⚡ Zero dependencies in the core (React is an optional peer)
 - 🧩 Works in React, Vue, Svelte, or plain JS
@@ -86,6 +86,7 @@ const off = subscribe((log) => console.log(log.method, log.url, log.status));
 - `uninstallFetchLogger()` — restore original `fetch`.
 - `subscribe(fn) => () => void` — listen to fetch log events.
 - `getLogs()` / `clearLogs()` / `isInstalled()`
+- `buildDebugReport(log, options?)` — paste-ready text report for a request.
 - `installConsoleLogger(options?) => () => void` — capture console output (no UI).
 - `subscribeConsole(fn)` / `getConsoleLogs()` / `clearConsoleLogs()` / `uninstallConsoleLogger()`
 - Types: `FetchLog`, `ConsoleLog`, `ConsoleLevel`, `InstallOptions`, `ConsoleOptions`, `MountOptions`.
@@ -96,6 +97,26 @@ Patches `window.fetch`, recording method, URL, parsed JSON request/response
 bodies, status, and timing into an in-memory store. The panel subscribes to the
 store and renders live. It only touches the browser (`typeof window` guarded),
 so it's safe to import in SSR — it no-ops on the server.
+
+## Built for mobile & QA debugging
+
+Fetch Logger shines where DevTools are hard to open:
+
+- mobile browsers and **WebViews**
+- staging links and QA builds
+- client demos and tester bug reports
+
+Testers can hit **Copy Debug Report** and paste a complete, redacted summary
+straight into a ticket — method, URL, status, timing, request/response bodies,
+and any console errors — so developers get reproducible context without asking
+"what did the network tab say?".
+
+```ts
+import { buildDebugReport, getLogs } from "@jasimvk/fetchlogger";
+
+const last = getLogs().at(-1);
+if (last) navigator.clipboard.writeText(buildDebugReport(last));
+```
 
 ## Security
 

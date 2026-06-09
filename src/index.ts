@@ -22,4 +22,6 @@ export {
   type ConsoleOptions,
 } from "./console";
 
+export { buildDebugReport, type DebugReportOptions } from "./report";
+
 export { mountFetchLoggerPanel, type MountOptions } from "./panel";

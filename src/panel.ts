@@ -16,6 +16,7 @@ import {
   type ConsoleLevel,
   type ConsoleOptions,
 } from "./console";
+import { buildDebugReport } from "./report";
 
 export interface MountOptions extends InstallOptions, ConsoleOptions {
   /** Auto-install the fetch patch when mounting. Default true. */
@@ -396,6 +397,7 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
       bar.appendChild(urlCol);
 
       if (detail.elapsed !== undefined) bar.appendChild(el("span", { color: "#c4b5fd", flexShrink: "0" }, `${detail.elapsed}ms`));
+      bar.appendChild(copyButton(() => buildDebugReport(detail), "copy report"));
       bar.appendChild(copyButton(() => detail.url, "copy url"));
       const x = el("span", { color: "#94a3b8", cursor: "pointer", flexShrink: "0", paddingLeft: "4px" }, "✕");
       x.onclick = () => { selected = null; render(); };
