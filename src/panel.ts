@@ -53,6 +53,58 @@ const el = (tag: string, style: Partial<CSSStyleDeclaration> = {}, text?: string
   return node;
 };
 
+const copyToClipboard = (text: string): Promise<void> => {
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    return navigator.clipboard.writeText(text);
+  }
+  // Fallback for non-secure contexts.
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+    return Promise.resolve();
+  } catch (e) {
+    return Promise.reject(e);
+  }
+};
+
+/** A small "copy" button that flips to "copied ✓" briefly. */
+const copyButton = (getText: () => string, label = "copy") => {
+  const btn = el("span", {
+    cursor: "pointer", fontSize: "9px", fontWeight: "bold", padding: "1px 6px",
+    borderRadius: "4px", border: "1px solid #475569", color: "#cbd5e1",
+    flexShrink: "0", userSelect: "none",
+  }, label);
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    copyToClipboard(getText()).then(
+      () => {
+        btn.textContent = "copied ✓";
+        btn.style.color = "#86efac";
+        btn.style.borderColor = "#16a34a";
+        setTimeout(() => {
+          btn.textContent = label;
+          btn.style.color = "#cbd5e1";
+          btn.style.borderColor = "#475569";
+        }, 1200);
+      },
+      () => {
+        btn.textContent = "failed";
+        setTimeout(() => { btn.textContent = label; }, 1200);
+      },
+    );
+  };
+  return btn;
+};
+
+const toText = (content: unknown): string =>
+  content === undefined ? "" : typeof content === "string" ? content : JSON.stringify(content, null, 2);
+
 /**
  * Mount the floating fetch-logger panel. Returns an unmount function that
  * removes the panel and (if autoInstall) restores the original fetch.
@@ -195,6 +247,7 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
         });
         row.appendChild(el("span", { color: consoleLevelColor(log.level), fontSize: "9px", fontWeight: "bold", minWidth: "34px", textTransform: "uppercase", flexShrink: "0" }, log.level));
         row.appendChild(el("span", { color: consoleLevelColor(log.level), fontSize: "10px", whiteSpace: "pre-wrap", wordBreak: "break-word", flex: "1" }, log.text));
+        row.appendChild(copyButton(() => log.text));
         cRows.appendChild(row);
       });
       consoleWrap.appendChild(cRows);
@@ -262,6 +315,7 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
       bar.appendChild(el("span", { color: statusColor(detail.status), fontWeight: "bold" }, String(detail.status ?? "")));
       bar.appendChild(el("span", { color: "#cbd5e1", wordBreak: "break-all", flex: "1" }, detail.url));
       if (detail.elapsed !== undefined) bar.appendChild(el("span", { color: "#c4b5fd", flexShrink: "0" }, `${detail.elapsed}ms`));
+      bar.appendChild(copyButton(() => detail.url, "copy url"));
       const x = el("span", { color: "#94a3b8", cursor: "pointer", flexShrink: "0", paddingLeft: "4px" }, "✕");
       x.onclick = () => { selected = null; render(); };
       bar.appendChild(x);
@@ -270,7 +324,11 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
       const bodies = el("div", { display: "flex", flex: "1", overflow: "hidden", minHeight: "0" });
       const mkSide = (title: string, titleColor: string, content: unknown, color: string, border: boolean) => {
         const side = el("div", { flex: "1", display: "flex", flexDirection: "column", overflow: "hidden", borderRight: border ? "1px solid #334155" : "none" });
-        side.appendChild(el("div", { padding: "3px 8px", background: "rgba(22,32,50,0.7)", color: titleColor, fontSize: "10px", fontWeight: "bold", flexShrink: "0" }, title));
+        const head = el("div", { display: "flex", alignItems: "center", gap: "6px", padding: "3px 8px", background: "rgba(22,32,50,0.7)", flexShrink: "0" });
+        head.appendChild(el("span", { color: titleColor, fontSize: "10px", fontWeight: "bold", flex: "1" }, title));
+        const text = toText(content);
+        if (text) head.appendChild(copyButton(() => text));
+        side.appendChild(head);
         const scroll = el("div", { flex: "1", overflowY: "auto", padding: "6px 8px" });
         const pre = el("pre", { margin: "0", color, whiteSpace: "pre-wrap", wordBreak: "break-all", fontSize: "10px" },
           content === undefined ? "— no body —" : typeof content === "string" ? content : JSON.stringify(content, null, 2));

@@ -12,6 +12,7 @@ A live, in-page **debug panel** for the browser — see every `fetch()` request/
 - 🌐 **Network tab** — every fetch with status, timing, and request/response bodies
 - 🖥️ **Console tab** — captures `console.log` / `info` / `warn` / `error` / `debug`
 - 🔎 Filter each tab; click a request to inspect it
+- 📋 One-click **copy** for request body, response body, URL, and console lines
 - 🔒 Auto-redacts secrets; nothing leaves the browser
 - ⚡ Zero dependencies in the core (React is an optional peer)
 - 🧩 Works in React, Vue, Svelte, or plain JS
