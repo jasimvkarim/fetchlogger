@@ -24,6 +24,8 @@ export interface MountOptions extends InstallOptions, ConsoleOptions {
   captureConsole?: boolean;
   /** Start expanded. Default false (collapsed). */
   defaultOpen?: boolean;
+  /** Auto-expand the first time a request or console entry is captured. Default false. */
+  openOnActivity?: boolean;
   /** Where the panel anchors. Default "bottom-center". */
   position?: "bottom-center" | "bottom-right" | "bottom-left";
   /** Element to append the panel to. Default document.body. */
@@ -422,8 +424,23 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
     rows.scrollTop = rows.scrollHeight;
   };
 
-  const unsub = subscribe(() => render());
-  const unsubConsole = subscribeConsole(() => render());
+  // Auto-expand once, the first time there's any activity (opt-in).
+  let autoOpened = false;
+  const maybeAutoOpen = () => {
+    if (
+      options.openOnActivity &&
+      !autoOpened &&
+      !open &&
+      !hidden &&
+      getLogs().length + getConsoleLogs().length > 0
+    ) {
+      open = true;
+      autoOpened = true;
+    }
+  };
+
+  const unsub = subscribe(() => { maybeAutoOpen(); render(); });
+  const unsubConsole = subscribeConsole(() => { maybeAutoOpen(); render(); });
   render();
 
   return () => {

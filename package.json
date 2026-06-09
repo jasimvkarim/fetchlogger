@@ -1,6 +1,6 @@
 {
   "name": "@jasimvk/fetchlogger",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Live in-page fetch/XHR logger panel — framework-agnostic core with an optional React wrapper.",
   "author": "jasimvk",
   "license": "MIT",
