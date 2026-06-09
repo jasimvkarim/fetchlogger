@@ -10,6 +10,8 @@
 
 ![Fetch Logger preview](https://raw.githubusercontent.com/jasimvkarim/fetchlogger/main/assets/fetchlogger-preview.png)
 
+https://github.com/jasimvkarim/fetchlogger/raw/main/assets/fetchlogger-demo.webm
+
 A live, in-page **debug panel** for the browser — see every `fetch()` request/response **and** your `console` output without opening DevTools. Framework-agnostic core with an optional React wrapper.
 
 ▶ **[Live demo on debugtools.org](https://debugtools.org/tools/fetch-logger/)**
