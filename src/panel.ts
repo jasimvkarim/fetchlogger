@@ -124,6 +124,8 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
   let urlExpanded = false;
   let filter = "";
   let tab: "network" | "console" = "network";
+  // Once the user drags the panel, we pin it to an absolute left/top.
+  let dragPos: { left: number; top: number } | null = null;
 
   const root = el("div", {
     position: "fixed",
@@ -141,6 +143,16 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
   });
 
   const place = (w: number) => {
+    if (dragPos) {
+      root.style.left = `${dragPos.left}px`;
+      root.style.top = `${dragPos.top}px`;
+      root.style.right = "";
+      root.style.bottom = "";
+      root.style.transform = "";
+      return;
+    }
+    root.style.top = "";
+    root.style.bottom = "12px";
     const pos = options.position || "bottom-center";
     if (pos === "bottom-right") { root.style.right = "12px"; root.style.left = ""; root.style.transform = ""; }
     else if (pos === "bottom-left") { root.style.left = "12px"; root.style.right = ""; root.style.transform = ""; }
@@ -148,6 +160,49 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
   };
 
   container.appendChild(root);
+
+  // ── Dragging: the header acts as a drag handle ──
+  let dragging = false;
+  let moved = false;
+  let startX = 0;
+  let startY = 0;
+  let baseLeft = 0;
+  let baseTop = 0;
+
+  const onPointerMove = (e: MouseEvent) => {
+    if (!dragging) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    if (!moved && Math.abs(dx) + Math.abs(dy) < 4) return; // small threshold = click, not drag
+    moved = true;
+    const maxLeft = Math.max(0, window.innerWidth - root.offsetWidth);
+    const maxTop = Math.max(0, window.innerHeight - root.offsetHeight);
+    dragPos = {
+      left: Math.min(Math.max(0, baseLeft + dx), maxLeft),
+      top: Math.min(Math.max(0, baseTop + dy), maxTop),
+    };
+    root.style.left = `${dragPos.left}px`;
+    root.style.top = `${dragPos.top}px`;
+    root.style.right = "";
+    root.style.bottom = "";
+    root.style.transform = "";
+    e.preventDefault();
+  };
+
+  const onPointerUp = () => { dragging = false; };
+
+  const startDrag = (e: MouseEvent) => {
+    const rect = root.getBoundingClientRect();
+    dragging = true;
+    moved = false;
+    startX = e.clientX;
+    startY = e.clientY;
+    baseLeft = rect.left;
+    baseTop = rect.top;
+  };
+
+  window.addEventListener("mousemove", onPointerMove);
+  window.addEventListener("mouseup", onPointerUp);
 
   const render = () => {
     root.innerHTML = "";
@@ -172,12 +227,14 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
     root.style.maxHeight = open ? "480px" : "auto";
     place(W);
 
-    // ── header ──
+    // ── header (drag handle) ──
     const header = el("div", {
       display: "flex", alignItems: "center", gap: "8px",
       padding: "6px 10px", background: "rgba(30,41,59,0.8)", flexShrink: "0",
+      cursor: "move", userSelect: "none",
     });
-    header.appendChild(el("span", { color: "#a5b4fc", fontWeight: "bold", fontSize: "12px" }, "🛰"));
+    header.onmousedown = startDrag;
+    header.appendChild(el("span", { color: "#a5b4fc", fontWeight: "bold", fontSize: "12px" }, "⠿"));
 
     // Tab switch
     const tabWrap = el("div", { display: "flex", gap: "2px", background: "rgba(15,23,42,0.6)", borderRadius: "6px", padding: "2px" });
@@ -213,7 +270,7 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
     close.onclick = () => { hidden = true; render(); };
     ctrls.appendChild(close);
     header.appendChild(ctrls);
-    header.onclick = (e) => { if (e.target === header) { open = !open; render(); } };
+    header.onclick = (e) => { if (!moved && e.target === header) { open = !open; render(); } };
     root.appendChild(header);
 
     if (!open) return;
@@ -372,6 +429,8 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
     unsubConsole();
     uninstall();
     uninstallConsole();
+    window.removeEventListener("mousemove", onPointerMove);
+    window.removeEventListener("mouseup", onPointerUp);
     if (root.parentNode) root.parentNode.removeChild(root);
   };
 }

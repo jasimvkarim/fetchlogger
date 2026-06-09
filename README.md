@@ -8,7 +8,7 @@
 
 A live, in-page **debug panel** for the browser — see every `fetch()` request/response **and** your `console` output without opening DevTools. Framework-agnostic core with an optional React wrapper.
 
-- 🛰 Floating panel, collapsible, draggable position
+- 🛰 Floating panel — collapsible and **draggable** (grab the header)
 - 🌐 **Network tab** — every fetch with status, timing, and request/response bodies
 - 🖥️ **Console tab** — captures `console.log` / `info` / `warn` / `error` / `debug`
 - 🔎 Filter each tab; click a request to inspect it
