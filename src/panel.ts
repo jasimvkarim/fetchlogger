@@ -121,6 +121,7 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
   let open = options.defaultOpen ?? false;
   let hidden = false;
   let selected: number | null = null;
+  let urlExpanded = false;
   let filter = "";
   let tab: "network" | "console" = "network";
 
@@ -301,7 +302,7 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
       const label = log.apiCode || log.url.replace(/^https?:\/\/[^/]+/, "");
       row.appendChild(el("span", { color: "#e2e8f0", flex: "1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "10px" }, label));
       if (log.elapsed !== undefined) row.appendChild(el("span", { color: "#c4b5fd", fontSize: "9px", flexShrink: "0" }, `${log.elapsed}ms`));
-      row.onclick = () => { selected = active ? null : log.id; render(); };
+      row.onclick = () => { selected = active ? null : log.id; urlExpanded = false; render(); };
       rows.appendChild(row);
     });
     list.appendChild(rows);
@@ -310,10 +311,26 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
     // ── detail ──
     if (detail) {
       const pane = el("div", { flex: "1", overflow: "hidden", display: "flex", flexDirection: "column" });
-      const bar = el("div", { padding: "5px 10px", background: "#1e293b", borderBottom: "1px solid #475569", flexShrink: "0", display: "flex", alignItems: "center", gap: "6px" });
-      bar.appendChild(el("span", { color: "#fbbf24", fontWeight: "bold" }, detail.method));
-      bar.appendChild(el("span", { color: statusColor(detail.status), fontWeight: "bold" }, String(detail.status ?? "")));
-      bar.appendChild(el("span", { color: "#cbd5e1", wordBreak: "break-all", flex: "1" }, detail.url));
+      const bar = el("div", { padding: "5px 10px", background: "#1e293b", borderBottom: "1px solid #475569", flexShrink: "0", display: "flex", alignItems: "flex-start", gap: "6px" });
+      bar.appendChild(el("span", { color: "#fbbf24", fontWeight: "bold", flexShrink: "0" }, detail.method));
+      bar.appendChild(el("span", { color: statusColor(detail.status), fontWeight: "bold", flexShrink: "0" }, String(detail.status ?? "")));
+
+      // URL column: clamped to 2 lines with a "show more" toggle when long.
+      const urlCol = el("div", { flex: "1", minWidth: "0", display: "flex", flexDirection: "column", gap: "2px" });
+      const urlSpan = el("span", { color: "#cbd5e1", wordBreak: "break-all", fontSize: "10px" }, detail.url);
+      if (!urlExpanded) {
+        Object.assign(urlSpan.style, {
+          display: "-webkit-box", webkitLineClamp: "2", webkitBoxOrient: "vertical", overflow: "hidden",
+        } as Partial<CSSStyleDeclaration>);
+      }
+      urlCol.appendChild(urlSpan);
+      if (detail.url.length > 90) {
+        const more = el("span", { color: "#93c5fd", cursor: "pointer", fontSize: "9px", fontWeight: "bold", userSelect: "none" }, urlExpanded ? "show less" : "show more");
+        more.onclick = (e) => { e.stopPropagation(); urlExpanded = !urlExpanded; render(); };
+        urlCol.appendChild(more);
+      }
+      bar.appendChild(urlCol);
+
       if (detail.elapsed !== undefined) bar.appendChild(el("span", { color: "#c4b5fd", flexShrink: "0" }, `${detail.elapsed}ms`));
       bar.appendChild(copyButton(() => detail.url, "copy url"));
       const x = el("span", { color: "#94a3b8", cursor: "pointer", flexShrink: "0", paddingLeft: "4px" }, "✕");
