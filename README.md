@@ -64,6 +64,10 @@ const off = subscribe((log) => console.log(log.method, log.url, log.status));
 | `maxLogs` | `100` | Max logs kept in memory (FIFO). |
 | `getLabel` | — | Derive a short label from the parsed JSON body (e.g. an API code). |
 | `captureResponseBody` | `true` | Clone + read response bodies. |
+| `autoRedact` | `true` | Auto-mask values whose key looks like a secret (`token`, `password`, `authorization`, `apiKey`, `secret`, `cookie`…). |
+| `redact` | — | `(log) => log` hook to strip/mask sensitive data before it is stored or shown. Runs after `autoRedact`. |
+| `maxBodyChars` | `20000` | Truncate captured request/response bodies longer than this. |
+| `silenceProductionWarning` | `false` | Suppress the console warning shown when installed in a production build. |
 | `defaultOpen` | `false` | Start expanded (panel only). |
 | `position` | `"bottom-center"` | `bottom-center` \| `bottom-right` \| `bottom-left` (panel only). |
 | `container` | `document.body` | Where to mount the panel. |
@@ -84,6 +88,31 @@ Patches `window.fetch`, recording method, URL, parsed JSON request/response
 bodies, status, and timing into an in-memory store. The panel subscribes to the
 store and renders live. It only touches the browser (`typeof window` guarded),
 so it's safe to import in SSR — it no-ops on the server.
+
+## Security
+
+This tool **displays request and response bodies**, which can contain tokens,
+passwords, or personal data. A few things to know:
+
+- **Don't ship it to production.** Gate it to development (`NODE_ENV`, an env
+  flag, or a branch). If it loads in a production build it logs a one-time
+  `console.warn` (silence with `silenceProductionWarning: true`).
+- **Secrets are auto-masked.** Values under keys that look sensitive
+  (`token`, `password`, `authorization`, `apiKey`, `secret`, `cookie`, …) are
+  replaced with `«redacted»` before being stored or shown. Disable with
+  `autoRedact: false`, or add your own rules via the `redact(log)` hook.
+- **No data leaves the browser.** Logs are kept in memory only — never sent
+  anywhere, never written to `localStorage`/cookies, and cleared on reload.
+- **Request headers are not captured** (only `content-type` is read to decide
+  JSON vs text). Note that full URLs *are* shown, so avoid putting secrets in
+  query strings.
+
+```ts
+installFetchLogger({
+  // mask anything else you don't want on screen
+  redact: (log) => ({ ...log, url: log.url.replace(/token=[^&]+/g, "token=•••") }),
+});
+```
 
 ## License
 

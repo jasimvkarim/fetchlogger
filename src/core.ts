@@ -22,6 +22,22 @@ export interface InstallOptions {
   getLabel?: (reqBody: unknown, url: string, method: string) => string | undefined;
   /** Capture response bodies (clones the response). Default true. */
   captureResponseBody?: boolean;
+  /**
+   * Redact sensitive data before it is stored/displayed. Runs on every completed
+   * log. Mutate or return a new log. Use this to strip tokens, passwords, PII.
+   * On top of this hook, common secret-looking keys are masked automatically
+   * unless `autoRedact` is set to false.
+   */
+  redact?: (log: FetchLog) => FetchLog;
+  /** Auto-mask obvious secret keys (token, password, authorization, secret, apiKey…). Default true. */
+  autoRedact?: boolean;
+  /** Truncate captured request/response bodies longer than this many chars. Default 20000. */
+  maxBodyChars?: number;
+  /**
+   * Suppress the console warning shown when the logger is installed in a
+   * production build (process.env.NODE_ENV === "production"). Default false.
+   */
+  silenceProductionWarning?: boolean;
 }
 
 type Listener = (log: FetchLog) => void;
@@ -33,7 +49,48 @@ let _opts: InstallOptions = {};
 const _logs: FetchLog[] = [];
 const _listeners = new Set<Listener>();
 
-const emit = (log: FetchLog) => {
+const SECRET_KEY_RE = /(pass(word)?|token|secret|authorization|auth|api[-_]?key|client[-_]?secret|cookie|session|credential|private[-_]?key|access[-_]?token|refresh[-_]?token|bearer)/i;
+const REDACTED = "«redacted»";
+
+/** Recursively mask values whose key looks like a secret. Returns a safe copy. */
+const autoMask = (value: unknown, depth = 0): unknown => {
+  if (depth > 6 || value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map((v) => autoMask(v, depth + 1));
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    out[k] = SECRET_KEY_RE.test(k) ? REDACTED : autoMask(v, depth + 1);
+  }
+  return out;
+};
+
+const truncate = (value: unknown, max: number): unknown => {
+  if (typeof value === "string" && value.length > max) {
+    return `${value.slice(0, max)}… «truncated ${value.length - max} chars»`;
+  }
+  return value;
+};
+
+/** Apply auto-masking, the user redact hook, and body-size limits to a completed log. */
+const sanitize = (log: FetchLog): FetchLog => {
+  let next = log;
+  const maxBody = _opts.maxBodyChars ?? 20000;
+
+  if (_opts.autoRedact !== false) {
+    next = { ...next, reqBody: autoMask(next.reqBody), resBody: autoMask(next.resBody) };
+  }
+  next = {
+    ...next,
+    reqBody: truncate(next.reqBody, maxBody),
+    resBody: truncate(next.resBody, maxBody),
+  };
+  if (_opts.redact) {
+    try { next = _opts.redact(next); } catch { /* ignore redact errors */ }
+  }
+  return next;
+};
+
+const emit = (rawLog: FetchLog) => {
+  const log = sanitize(rawLog);
   const idx = _logs.findIndex((l) => l.id === log.id);
   if (idx >= 0) _logs[idx] = log;
   else {
@@ -70,6 +127,23 @@ export const installFetchLogger = (options: InstallOptions = {}): (() => void) =
 
   _opts = options;
   _maxLogs = options.maxLogs ?? 100;
+
+  // Safety nudge: this tool displays request/response bodies. Warn if it is
+  // being installed in a production build, where that could expose user data.
+  const nodeEnv = (globalThis as { process?: { env?: { NODE_ENV?: string } } })
+    .process?.env?.NODE_ENV;
+  if (
+    !options.silenceProductionWarning &&
+    nodeEnv === "production" &&
+    typeof console !== "undefined"
+  ) {
+    console.warn(
+      "[fetchlogger] installed in a production build — it captures and displays " +
+        "request/response bodies, which may expose tokens or user data. Gate it to " +
+        "development, or pass { silenceProductionWarning: true } to dismiss.",
+    );
+  }
+
   _originalFetch = window.fetch.bind(window);
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
