@@ -121,7 +121,9 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
 
   const container = options.container || document.body;
   let open = options.defaultOpen ?? false;
-  let hidden = false;
+  // With openOnActivity the panel starts fully closed (a small pill) and only
+  // appears once there's something to show.
+  let hidden = !!options.openOnActivity && !options.defaultOpen;
   let selected: number | null = null;
   let urlExpanded = false;
   let filter = "";
@@ -214,6 +216,7 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
     if (hidden) {
       root.style.width = "auto";
       root.style.maxHeight = "auto";
+      place(0);
       const pill = el("button", {
         all: "unset", cursor: "pointer", padding: "6px 12px",
         color: "#a5b4fc", fontWeight: "bold", display: "block",
@@ -271,7 +274,7 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
     ctrls.appendChild(toggle);
     const close = el("span", { color: "#f87171", cursor: "pointer", fontSize: "14px", fontWeight: "bold" }, "✕");
     close.title = "Close";
-    close.onclick = () => { hidden = true; render(); };
+    close.onclick = () => { hidden = true; dragPos = null; render(); };
     ctrls.appendChild(close);
     header.appendChild(ctrls);
     header.onclick = (e) => { if (!moved && e.target === header) { open = !open; render(); } };
@@ -424,16 +427,16 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
     rows.scrollTop = rows.scrollHeight;
   };
 
-  // Auto-expand once, the first time there's any activity (opt-in).
+  // Auto-open once, the first time there's any activity (opt-in). This un-hides
+  // and expands the panel from its closed pill state.
   let autoOpened = false;
   const maybeAutoOpen = () => {
     if (
       options.openOnActivity &&
       !autoOpened &&
-      !open &&
-      !hidden &&
       getLogs().length + getConsoleLogs().length > 0
     ) {
+      hidden = false;
       open = true;
       autoOpened = true;
     }
