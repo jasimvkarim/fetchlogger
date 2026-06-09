@@ -244,7 +244,9 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
         cursor: "pointer", fontSize: "10px", fontWeight: "bold", padding: "2px 8px", borderRadius: "4px",
         color: active ? "#0f172a" : "#cbd5e1", background: active ? "#a5b4fc" : "transparent",
       }, `${label} ${count}`);
-      btn.onclick = (e) => { e.stopPropagation(); tab = id; selected = null; render(); };
+      // Clicking a tab/count also expands the panel — so the collapsed counts
+      // aren't a dead end ("I only see counts").
+      btn.onclick = (e) => { e.stopPropagation(); tab = id; selected = null; open = true; render(); };
       return btn;
     };
     tabWrap.appendChild(mkTab("network", "Network", logs.length));
