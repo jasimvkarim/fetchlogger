@@ -8,7 +8,9 @@ export default defineConfig({
   format: ["esm", "cjs"],
   dts: true,
   clean: true,
-  sourcemap: true,
+  // No source maps in the published tarball — keeps the source private and the
+  // package lean. Flip to true locally when you need to debug the build.
+  sourcemap: false,
   treeshake: true,
   external: ["react"],
 });

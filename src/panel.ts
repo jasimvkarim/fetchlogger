@@ -6,7 +6,18 @@ import {
   subscribe,
   getLogs,
   clearLogs,
+  setThrottle,
+  getThrottle,
+  clearBrowserCache,
+  getOverrides,
+  addOverride,
+  updateOverride,
+  removeOverride,
+  clearOverrides,
+  subscribeOverrides,
+  isProductionBlocked,
   type InstallOptions,
+  type OverrideRule,
 } from "./core";
 import {
   installConsoleLogger,
@@ -115,6 +126,13 @@ const toText = (content: unknown): string =>
 export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
   if (typeof document === "undefined") return () => {};
 
+  // Never ship the panel to end users: in a production build it doesn't mount at
+  // all unless the caller explicitly opts in with { allowInProduction: true }.
+  if (isProductionBlocked(options)) {
+    installFetchLogger(options); // no-ops, but emits the one-time production warning
+    return () => {};
+  }
+
   const uninstall =
     options.autoInstall === false ? () => {} : installFetchLogger(options);
   const uninstallConsole =
@@ -128,7 +146,7 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
   let selected: number | null = null;
   let urlExpanded = false;
   let filter = "";
-  let tab: "network" | "console" = "network";
+  let tab: "network" | "console" | "mock" = "network";
   // Once the user drags the panel, we pin it to an absolute left/top.
   let dragPos: { left: number; top: number } | null = null;
 
@@ -209,6 +227,75 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
   window.addEventListener("mousemove", onPointerMove);
   window.addEventListener("mouseup", onPointerUp);
 
+  // Build the editor card for one override rule (Mock tab). Text fields commit
+  // on `change` (blur), not on each keystroke, so re-renders don't fight typing.
+  const renderRule = (r: OverrideRule): HTMLElement => {
+    const card = el("div", {
+      border: "1px solid #334155", borderRadius: "6px", padding: "6px",
+      marginBottom: "6px", display: "flex", flexDirection: "column", gap: "5px",
+      background: r.enabled ? "rgba(30,41,59,0.6)" : "rgba(30,41,59,0.25)",
+      opacity: r.enabled ? "1" : "0.7",
+    });
+
+    const row1 = el("div", { display: "flex", alignItems: "center", gap: "6px" });
+    const chk = el("input", { cursor: "pointer", margin: "0" } as any) as HTMLInputElement;
+    chk.type = "checkbox"; chk.checked = r.enabled; chk.title = "enable / disable";
+    chk.onchange = () => { updateOverride(r.id, { enabled: chk.checked }); render(); };
+    row1.appendChild(chk);
+
+    const modeSel = el("select", {
+      background: "#1e293b", color: "#e2e8f0", border: "1px solid #475569",
+      borderRadius: "4px", fontSize: "10px", padding: "2px",
+    } as any) as HTMLSelectElement;
+    ([["response", "mock response"], ["request", "rewrite request"]] as const).forEach(([val, lbl]) => {
+      const o = document.createElement("option");
+      o.value = val; o.textContent = lbl;
+      if (r.mode === val) o.selected = true;
+      modeSel.appendChild(o);
+    });
+    modeSel.onchange = () => { updateOverride(r.id, { mode: modeSel.value as OverrideRule["mode"] }); render(); };
+    row1.appendChild(modeSel);
+
+    if (r.mode === "response") {
+      const statusInput = el("input", {
+        width: "46px", background: "#1e293b", color: "#e2e8f0", border: "1px solid #475569",
+        borderRadius: "4px", fontSize: "10px", padding: "2px 4px",
+      } as any) as HTMLInputElement;
+      statusInput.type = "number"; statusInput.value = String(r.status); statusInput.title = "response status";
+      statusInput.onchange = () => updateOverride(r.id, { status: Number(statusInput.value) || 200 });
+      row1.appendChild(statusInput);
+    }
+
+    const del = el("span", { cursor: "pointer", color: "#f87171", marginLeft: "auto", fontSize: "13px", fontWeight: "bold" }, "✕");
+    del.title = "delete rule";
+    del.onclick = () => { removeOverride(r.id); render(); };
+    row1.appendChild(del);
+    card.appendChild(row1);
+
+    const matchInput = el("input", {
+      width: "100%", boxSizing: "border-box", background: "#1e293b", color: "#f1f5f9",
+      border: "1px solid #475569", borderRadius: "4px", fontSize: "10px", padding: "3px 6px",
+    } as any) as HTMLInputElement;
+    matchInput.placeholder = "match: URL substring or API label (e.g. saveTirePlan)";
+    matchInput.value = r.match;
+    matchInput.onchange = () => updateOverride(r.id, { match: matchInput.value });
+    card.appendChild(matchInput);
+
+    const ta = el("textarea", {
+      width: "100%", boxSizing: "border-box", background: "#0f172a", color: "#a7f3d0",
+      border: "1px solid #475569", borderRadius: "4px", fontSize: "10px", padding: "4px 6px",
+      minHeight: "46px", resize: "vertical", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+    } as any) as HTMLTextAreaElement;
+    ta.placeholder = r.mode === "response"
+      ? 'response body — e.g. {"success":true,"respData":[...]}'
+      : 'new request body — e.g. {"API_Code":"saveTirePlan","inparams":{...}}';
+    ta.value = r.body;
+    ta.onchange = () => updateOverride(r.id, { body: ta.value });
+    card.appendChild(ta);
+
+    return card;
+  };
+
   const render = () => {
     root.innerHTML = "";
     const logs = getLogs();
@@ -244,7 +331,7 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
 
     // Tab switch
     const tabWrap = el("div", { display: "flex", gap: "2px", background: "rgba(15,23,42,0.6)", borderRadius: "6px", padding: "2px" });
-    const mkTab = (id: "network" | "console", label: string, count: number) => {
+    const mkTab = (id: "network" | "console" | "mock", label: string, count: number) => {
       const active = tab === id;
       const btn = el("span", {
         cursor: "pointer", fontSize: "10px", fontWeight: "bold", padding: "2px 8px", borderRadius: "4px",
@@ -257,6 +344,7 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
     };
     tabWrap.appendChild(mkTab("network", "Network", logs.length));
     tabWrap.appendChild(mkTab("console", "Console", clogs.length));
+    tabWrap.appendChild(mkTab("mock", "Mock", getOverrides().length));
     header.appendChild(tabWrap);
 
     const ctrls = el("div", { marginLeft: "auto", display: "flex", gap: "8px", alignItems: "center" });
@@ -265,6 +353,7 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
       clearBtn.onclick = (e) => {
         e.stopPropagation();
         if (tab === "console") clearConsoleLogs();
+        else if (tab === "mock") clearOverrides();
         else { clearLogs(); selected = null; }
         render();
       };
@@ -282,6 +371,79 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
     root.appendChild(header);
 
     if (!open) return;
+
+    // ── Tools strip: throttle slider + cache clear (shown on all tabs) ──
+    const tools = el("div", {
+      display: "flex", alignItems: "center", gap: "8px",
+      padding: "5px 10px", background: "rgba(20,28,45,0.7)",
+      borderBottom: "1px solid #334155", flexShrink: "0",
+    });
+    tools.appendChild(el("span", { fontSize: "11px", flexShrink: "0" }, "🐢"));
+    const slider = el("input", {
+      flex: "1", minWidth: "70px", cursor: "pointer", accentColor: "#a5b4fc",
+    } as any) as HTMLInputElement;
+    slider.type = "range";
+    slider.min = "0";
+    slider.max = "5000";
+    slider.step = "100";
+    slider.value = String(getThrottle());
+    slider.title = "Throttle every fetch by this many ms";
+    const thLabel = el("span", {
+      color: "#cbd5e1", fontSize: "10px", minWidth: "46px", textAlign: "right", flexShrink: "0",
+    }, `${getThrottle()}ms`);
+    slider.oninput = () => {
+      setThrottle(Number(slider.value));
+      thLabel.textContent = `${slider.value}ms`;
+    };
+    tools.appendChild(slider);
+    tools.appendChild(thLabel);
+    const cacheBtn = el("span", {
+      cursor: "pointer", fontSize: "10px", fontWeight: "bold", padding: "2px 8px",
+      borderRadius: "4px", border: "1px solid #475569", color: "#cbd5e1",
+      flexShrink: "0", userSelect: "none",
+    }, "🧹 cache");
+    cacheBtn.title = "Clear localStorage, sessionStorage, caches & service workers";
+    cacheBtn.onclick = (e) => {
+      e.stopPropagation();
+      cacheBtn.textContent = "clearing…";
+      clearBrowserCache().then(() => {
+        cacheBtn.textContent = "cleared ✓";
+        cacheBtn.style.color = "#86efac";
+        cacheBtn.style.borderColor = "#16a34a";
+        setTimeout(() => {
+          cacheBtn.textContent = "🧹 cache";
+          cacheBtn.style.color = "#cbd5e1";
+          cacheBtn.style.borderColor = "#475569";
+        }, 1400);
+      });
+    };
+    tools.appendChild(cacheBtn);
+    root.appendChild(tools);
+
+    // ── Mock / overrides tab ──
+    if (tab === "mock") {
+      const mockWrap = el("div", { display: "flex", flexDirection: "column", flex: "1", overflow: "hidden", minHeight: "0" });
+      const mockBar = el("div", { display: "flex", alignItems: "center", gap: "8px", padding: "5px 8px", borderBottom: "1px solid #334155", flexShrink: "0" });
+      const addBtn = el("span", {
+        cursor: "pointer", fontSize: "10px", fontWeight: "bold", padding: "2px 8px",
+        borderRadius: "4px", border: "1px solid #6366f1", color: "#c7d2fe", background: "rgba(99,102,241,0.15)",
+      }, "+ add rule");
+      addBtn.onclick = (e) => { e.stopPropagation(); addOverride({ match: "", mode: "response", status: 200, body: "" }); render(); };
+      mockBar.appendChild(addBtn);
+      mockBar.appendChild(el("span", { color: "#64748b", fontSize: "9px", flex: "1" }, "match by URL substring or API label"));
+      mockWrap.appendChild(mockBar);
+
+      const ovScroll = el("div", { overflowY: "auto", flex: "1", padding: "6px" });
+      const rules = getOverrides();
+      if (rules.length === 0) {
+        ovScroll.appendChild(el("div", { padding: "14px", color: "#94a3b8", textAlign: "center", fontSize: "10px", lineHeight: "1.5" },
+          "No override rules yet.\nAdd one to mock a response (status + body) or rewrite a request body before it’s sent."));
+      }
+      rules.forEach((r) => ovScroll.appendChild(renderRule(r)));
+      mockWrap.appendChild(ovScroll);
+      root.appendChild(mockWrap);
+      return;
+    }
 
     // ── Console tab ──
     if (tab === "console") {
@@ -366,6 +528,7 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
       row.appendChild(el("span", { color: "#fbbf24", fontSize: "10px", minWidth: "28px", fontWeight: "bold" }, log.method));
       const label = log.apiCode || log.url.replace(/^https?:\/\/[^/]+/, "");
       row.appendChild(el("span", { color: "#e2e8f0", flex: "1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "10px" }, label));
+      if (log.overridden) row.appendChild(el("span", { color: "#c084fc", fontSize: "8px", fontWeight: "bold", flexShrink: "0", border: "1px solid #7c3aed", borderRadius: "3px", padding: "0 3px" }, "MOCK"));
       if (log.elapsed !== undefined) row.appendChild(el("span", { color: "#c4b5fd", fontSize: "9px", flexShrink: "0" }, `${log.elapsed}ms`));
       row.onclick = () => { selected = active ? null : log.id; urlExpanded = false; render(); };
       rows.appendChild(row);
@@ -444,13 +607,24 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
     }
   };
 
-  const unsub = subscribe(() => { maybeAutoOpen(); render(); });
-  const unsubConsole = subscribeConsole(() => { maybeAutoOpen(); render(); });
+  const onActivity = () => {
+    maybeAutoOpen();
+    // Don't wipe an in-progress edit in the Mock tab (focus is inside the panel).
+    if (tab === "mock" && root.contains(document.activeElement)) return;
+    render();
+  };
+  const unsub = subscribe(onActivity);
+  const unsubConsole = subscribeConsole(onActivity);
+  const unsubOv = subscribeOverrides(() => {
+    if (tab === "mock" && root.contains(document.activeElement)) return;
+    render();
+  });
   render();
 
   return () => {
     unsub();
     unsubConsole();
+    unsubOv();
     uninstall();
     uninstallConsole();
     window.removeEventListener("mousemove", onPointerMove);

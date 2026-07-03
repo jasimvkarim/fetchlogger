@@ -6,8 +6,22 @@ export {
   getLogs,
   clearLogs,
   isInstalled,
+  isProductionBlocked,
+  // Throttle
+  setThrottle,
+  getThrottle,
+  // Overrides (mock response / rewrite request)
+  addOverride,
+  updateOverride,
+  removeOverride,
+  clearOverrides,
+  getOverrides,
+  subscribeOverrides,
+  // Cache clear
+  clearBrowserCache,
   type FetchLog,
   type InstallOptions,
+  type OverrideRule,
 } from "./core";
 
 export {

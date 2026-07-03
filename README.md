@@ -19,6 +19,9 @@ A live, in-page **debug panel** for the browser — see every `fetch()` request/
 - 🛰 Floating panel — collapsible and **draggable** (grab the header)
 - 🌐 **Network tab** — every fetch with status, timing, and request/response bodies
 - 🖥️ **Console tab** — captures `console.log` / `info` / `warn` / `error` / `debug`
+- 🎭 **Mock tab** — override any request: return a **mock response** (status + body) or **rewrite the outgoing request body**, matched by URL substring or API label
+- 🐢 **Throttle slider** — add artificial latency to every fetch to reproduce slow networks, spinners and timeouts
+- 🧹 **Cache-clear button** — wipe `localStorage`, `sessionStorage`, Cache Storage & service workers in one click
 - 🔎 Filter each tab; click a request to inspect it
 - 📋 One-click **copy** — request body, response body, URL, console lines, or a full **Copy Debug Report** (method, URL, status, timing, bodies, console errors) for bug tickets
 - 🔒 Auto-redacts secrets; nothing leaves the browser
@@ -68,6 +71,33 @@ installFetchLogger({ getLabel: (body) => (body as any)?.API_Code });
 const off = subscribe((log) => console.log(log.method, log.url, log.status));
 ```
 
+## Mock, throttle & cache
+
+Three controls for shaping requests live — in the panel, or programmatically.
+
+**In the panel:**
+
+- **Mock tab → _add rule_** — match a request by URL substring or API label, then either return a **mock response** (status + body) or **rewrite the outgoing request body**. Toggle rules on/off; mocked rows get a `MOCK` badge.
+- **🐢 throttle slider** — delay every fetch by 0–5000 ms (reproduce slow networks / timeouts).
+- **🧹 cache button** — clear `localStorage`, `sessionStorage`, Cache Storage and service workers.
+
+**From code:**
+
+```ts
+import {
+  addOverride, setThrottle, clearBrowserCache,
+} from "@jasimvk/fetchlogger";
+
+// Mock a response without a backend (matched by URL substring or API label):
+addOverride({ match: "saveTirePlan", mode: "response", status: 200, body: '{"success":true}' });
+
+// Rewrite an outgoing request body, then let it hit the server:
+addOverride({ match: "getModel", mode: "request", body: '{"API_Code":"getModel","inparams":{}}' });
+
+setThrottle(2000);        // delay every fetch by 2s (0 disables)
+await clearBrowserCache();
+```
+
 ## Options
 
 | Option | Default | Description |
@@ -78,9 +108,10 @@ const off = subscribe((log) => console.log(log.method, log.url, log.status));
 | `captureConsole` | `true` | Also capture console output into a Console tab (panel only). |
 | `maxConsoleLogs` | `200` | Max console entries kept in memory (FIFO). |
 | `levels` | all 5 | Console levels to capture: `log`, `info`, `warn`, `error`, `debug`. |
-| `autoRedact` | `true` | Auto-mask values whose key looks like a secret (`token`, `password`, `authorization`, `apiKey`, `secret`, `cookie`…). |
+| `autoRedact` | `true` | Auto-mask secrets in bodies **and** URLs: sensitive keys (`token`, `password`, `authorization`, `apiKey`, `secret`, `cookie`…), secret query params + `user:pass@` userinfo, and JWT/`Bearer` tokens in string bodies. |
 | `redact` | — | `(log) => log` hook to strip/mask sensitive data before it is stored or shown. Runs after `autoRedact`. |
 | `maxBodyChars` | `20000` | Truncate captured request/response bodies longer than this. |
+| `allowInProduction` | `false` | Run in a production build. Default off — in production the logger/panel disable themselves entirely. |
 | `silenceProductionWarning` | `false` | Suppress the console warning shown when installed in a production build. |
 | `defaultOpen` | `false` | Start expanded (panel only). |
 | `position` | `"bottom-center"` | `bottom-center` \| `bottom-right` \| `bottom-left` (panel only). |
@@ -94,10 +125,13 @@ const off = subscribe((log) => console.log(log.method, log.url, log.status));
 - `uninstallFetchLogger()` — restore original `fetch`.
 - `subscribe(fn) => () => void` — listen to fetch log events.
 - `getLogs()` / `clearLogs()` / `isInstalled()`
+- `addOverride(rule?)` / `updateOverride(id, patch)` / `removeOverride(id)` / `clearOverrides()` / `getOverrides()` / `subscribeOverrides(fn)` — manage request/response override rules.
+- `setThrottle(ms)` / `getThrottle()` — global artificial fetch latency.
+- `clearBrowserCache()` — clear localStorage, sessionStorage, Cache Storage & service workers.
 - `buildDebugReport(log, options?)` — paste-ready text report for a request.
 - `installConsoleLogger(options?) => () => void` — capture console output (no UI).
 - `subscribeConsole(fn)` / `getConsoleLogs()` / `clearConsoleLogs()` / `uninstallConsoleLogger()`
-- Types: `FetchLog`, `ConsoleLog`, `ConsoleLevel`, `InstallOptions`, `ConsoleOptions`, `MountOptions`.
+- Types: `FetchLog`, `OverrideRule`, `ConsoleLog`, `ConsoleLevel`, `InstallOptions`, `ConsoleOptions`, `MountOptions`.
 
 ## How it works
 
@@ -131,18 +165,24 @@ if (last) navigator.clipboard.writeText(buildDebugReport(last));
 This tool **displays request and response bodies**, which can contain tokens,
 passwords, or personal data. A few things to know:
 
-- **Don't ship it to production.** Gate it to development (`NODE_ENV`, an env
-  flag, or a branch). If it loads in a production build it logs a one-time
-  `console.warn` (silence with `silenceProductionWarning: true`).
-- **Secrets are auto-masked.** Values under keys that look sensitive
-  (`token`, `password`, `authorization`, `apiKey`, `secret`, `cookie`, …) are
-  replaced with `«redacted»` before being stored or shown. Disable with
-  `autoRedact: false`, or add your own rules via the `redact(log)` hook.
+- **Disabled in production.** Don't ship it to end users — and it won't ship
+  itself. In a production build (`NODE_ENV === "production"`) `installFetchLogger`
+  and `mountFetchLoggerPanel` **no-op entirely** (no fetch patch, no panel, nothing
+  captured) and log a one-time `console.warn`. Force it on with
+  `allowInProduction: true`; silence the warning with `silenceProductionWarning: true`.
+  Check the state yourself with `isProductionBlocked(options)`.
+- **Secrets are auto-masked** — in bodies **and** URLs. Values under sensitive
+  keys (`token`, `password`, `authorization`, `apiKey`, `secret`, `cookie`, …)
+  are replaced with `«redacted»`; secret **query params** (`access_token`,
+  `api_key`, `signature`, …) and `user:pass@` userinfo are stripped from the
+  stored URL; and JWTs / `Bearer …` tokens inside plain-text bodies are masked
+  too. Disable with `autoRedact: false`, or add your own rules via `redact(log)`.
+  Redaction only affects what's **stored/displayed** — the real network request
+  is sent untouched.
 - **No data leaves the browser.** Logs are kept in memory only — never sent
   anywhere, never written to `localStorage`/cookies, and cleared on reload.
 - **Request headers are not captured** (only `content-type` is read to decide
-  JSON vs text). Note that full URLs *are* shown, so avoid putting secrets in
-  query strings.
+  JSON vs text).
 
 ```ts
 installFetchLogger({
