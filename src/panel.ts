@@ -38,7 +38,7 @@ export interface MountOptions extends InstallOptions, ConsoleOptions {
   defaultOpen?: boolean;
   /** Auto-expand the first time a request or console entry is captured. Default false. */
   openOnActivity?: boolean;
-  /** Where the panel anchors. Default "bottom-center". */
+  /** Where the panel anchors. Default "bottom-left". */
   position?: "bottom-center" | "bottom-right" | "bottom-left";
   /** Element to append the panel to. Default document.body. */
   container?: HTMLElement;
@@ -140,13 +140,17 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
 
   const container = options.container || document.body;
   let open = options.defaultOpen ?? false;
-  // With openOnActivity the panel starts fully closed (a small pill) and only
-  // appears once there's something to show.
-  let hidden = !!options.openOnActivity && !options.defaultOpen;
+  // Start fully closed (a small pill) by default; the panel only expands when
+  // the user clicks it, when defaultOpen is set, or (with openOnActivity) once
+  // there's something to show.
+  let hidden = !options.defaultOpen;
   let selected: number | null = null;
   let urlExpanded = false;
   let filter = "";
   let tab: "network" | "console" | "mock" = "network";
+  // Emulated device viewport (rewrites <meta name="viewport">). "desktop" is
+  // the untouched default until the user picks a device.
+  let device: "mobile" | "tablet" | "desktop" = "desktop";
   // Once the user drags the panel, we pin it to an absolute left/top.
   let dragPos: { left: number; top: number } | null = null;
 
@@ -176,7 +180,7 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
     }
     root.style.top = "";
     root.style.bottom = "12px";
-    const pos = options.position || "bottom-center";
+    const pos = options.position || "bottom-left";
     if (pos === "bottom-right") { root.style.right = "12px"; root.style.left = ""; root.style.transform = ""; }
     else if (pos === "bottom-left") { root.style.left = "12px"; root.style.right = ""; root.style.transform = ""; }
     else { root.style.left = "50%"; root.style.right = ""; root.style.transform = `translateX(-50%)`; void w; }
@@ -226,6 +230,48 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
 
   window.addEventListener("mousemove", onPointerMove);
   window.addEventListener("mouseup", onPointerUp);
+
+  // ── Device viewport emulation ──
+  // Clicking the mobile/tablet/desktop icons rewrites <meta name="viewport">
+  // to emulate that device width. This affects real devices and simulators;
+  // desktop browsers ignore the width but the tag still updates. The original
+  // viewport content is captured on first use and restored on unmount.
+  const VIEWPORTS = {
+    mobile: "width=375, initial-scale=1",
+    tablet: "width=768, initial-scale=1",
+    desktop: "width=device-width, initial-scale=1",
+  } as const;
+  let originalViewport: string | null = null;
+  let viewportMetaCreated = false;
+  const applyViewport = (d: "mobile" | "tablet" | "desktop") => {
+    if (typeof document === "undefined") return;
+    let meta = document.querySelector('meta[name="viewport"]') as HTMLMetaElement | null;
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.setAttribute("name", "viewport");
+      document.head.appendChild(meta);
+      viewportMetaCreated = true;
+    }
+    if (originalViewport === null) originalViewport = meta.getAttribute("content");
+    meta.setAttribute("content", VIEWPORTS[d]);
+    device = d;
+  };
+  const restoreViewport = () => {
+    const meta = document.querySelector('meta[name="viewport"]') as HTMLMetaElement | null;
+    if (!meta) return;
+    if (viewportMetaCreated) meta.remove();
+    else if (originalViewport !== null) meta.setAttribute("content", originalViewport);
+  };
+
+  // Tiny inline device glyphs (mobile → narrow, tablet → medium, desktop → wide
+  // with a stand) so the switcher reads at a glance.
+  const deviceSvg = (kind: "mobile" | "tablet" | "desktop"): string => {
+    const s = (inner: string) =>
+      `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block">${inner}</svg>`;
+    if (kind === "mobile") return s('<rect x="7" y="2" width="10" height="20" rx="2"/><line x1="11" y1="18" x2="13" y2="18"/>');
+    if (kind === "tablet") return s('<rect x="4" y="3" width="16" height="18" rx="2"/><line x1="11" y1="17" x2="13" y2="17"/>');
+    return s('<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>');
+  };
 
   // Build the editor card for one override rule (Mock tab). Text fields commit
   // on `change` (blur), not on each keystroke, so re-renders don't fight typing.
@@ -418,6 +464,30 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
       });
     };
     tools.appendChild(cacheBtn);
+
+    // ── Device viewport switcher (mobile / tablet / desktop) ──
+    const deviceWrap = el("div", {
+      display: "flex", gap: "2px", marginLeft: "2px", flexShrink: "0",
+      alignItems: "center",
+    });
+    const mkDevice = (d: "mobile" | "tablet" | "desktop", title: string) => {
+      const active = device === d;
+      const b = el("span", {
+        cursor: "pointer", padding: "3px 5px", borderRadius: "4px", display: "flex",
+        border: active ? "1px solid #a5b4fc" : "1px solid #475569",
+        background: active ? "rgba(165,180,252,0.18)" : "transparent",
+        color: active ? "#c7d2fe" : "#94a3b8", userSelect: "none",
+      });
+      b.innerHTML = deviceSvg(d);
+      b.title = title;
+      b.onclick = (e) => { e.stopPropagation(); applyViewport(d); render(); };
+      return b;
+    };
+    deviceWrap.appendChild(mkDevice("mobile", "Mobile viewport (width=375)"));
+    deviceWrap.appendChild(mkDevice("tablet", "Tablet viewport (width=768)"));
+    deviceWrap.appendChild(mkDevice("desktop", "Desktop viewport (device-width)"));
+    tools.appendChild(deviceWrap);
+
     root.appendChild(tools);
 
     // ── Mock / overrides tab ──
@@ -627,6 +697,7 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
     unsubOv();
     uninstall();
     uninstallConsole();
+    restoreViewport();
     window.removeEventListener("mousemove", onPointerMove);
     window.removeEventListener("mouseup", onPointerUp);
     if (root.parentNode) root.parentNode.removeChild(root);

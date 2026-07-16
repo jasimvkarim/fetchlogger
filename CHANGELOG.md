@@ -5,6 +5,21 @@ All notable changes to `@jasimvk/fetchlogger` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-07-17
+
+### Added
+- **📱 Device viewport switcher** — mobile / tablet / desktop icons in the tools strip
+  rewrite `<meta name="viewport">` (`width=375` / `width=768` / `width=device-width`) to
+  emulate device widths on real devices and simulators. The original viewport is captured
+  on first use and restored on unmount.
+
+### Changed
+- **Panel starts closed by default.** It now mounts as the small corner pill instead of a
+  visible collapsed header; click it — or pass `defaultOpen: true` — to expand.
+  **Behaviour change** for callers that relied on the panel being visible on load.
+- **Default `position` is now `bottom-left`** (was `bottom-center`). **Behaviour change** —
+  pass `position: "bottom-center"` to keep the old placement.
+
 ## [0.3.0] - 2026-07-03
 
 ### Added
@@ -96,6 +111,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial release: live in-page `fetch`/XHR logger panel — framework-agnostic core with
   an optional React wrapper.
 
+[0.4.0]: https://github.com/jasimvkarim/fetchlogger/releases/tag/v0.4.0
 [0.3.0]: https://github.com/jasimvkarim/fetchlogger/releases/tag/v0.3.0
 [0.2.0]: https://github.com/jasimvkarim/fetchlogger/releases/tag/v0.2.0
 [0.1.9]: https://github.com/jasimvkarim/fetchlogger/releases/tag/v0.1.9

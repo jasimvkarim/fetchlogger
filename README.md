@@ -22,6 +22,7 @@ A live, in-page **debug panel** for the browser — see every `fetch()` request/
 - 🎭 **Mock tab** — override any request: return a **mock response** (status + body) or **rewrite the outgoing request body**, matched by URL substring or API label
 - 🐢 **Throttle slider** — add artificial latency to every fetch to reproduce slow networks, spinners and timeouts
 - 🧹 **Cache-clear button** — wipe `localStorage`, `sessionStorage`, Cache Storage & service workers in one click
+- 📱 **Device viewport switcher** — mobile / tablet / desktop icons rewrite the page's `<meta name="viewport">` to emulate device widths (real devices & simulators)
 - 🔎 Filter each tab; click a request to inspect it
 - 📋 One-click **copy** — request body, response body, URL, console lines, or a full **Copy Debug Report** (method, URL, status, timing, bodies, console errors) for bug tickets
 - 🔒 Auto-redacts secrets; nothing leaves the browser
@@ -113,8 +114,8 @@ await clearBrowserCache();
 | `maxBodyChars` | `20000` | Truncate captured request/response bodies longer than this. |
 | `allowInProduction` | `false` | Run in a production build. Default off — in production the logger/panel disable themselves entirely. |
 | `silenceProductionWarning` | `false` | Suppress the console warning shown when installed in a production build. |
-| `defaultOpen` | `false` | Start expanded (panel only). |
-| `position` | `"bottom-center"` | `bottom-center` \| `bottom-right` \| `bottom-left` (panel only). |
+| `defaultOpen` | `false` | Start expanded. Default is closed (a small corner pill); click it to expand (panel only). |
+| `position` | `"bottom-left"` | `bottom-center` \| `bottom-right` \| `bottom-left` (panel only). |
 | `container` | `document.body` | Where to mount the panel. |
 | `autoInstall` | `true` | Patch fetch on mount (panel only). |
 
