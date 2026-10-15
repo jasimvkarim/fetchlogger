@@ -23,6 +23,7 @@ A live, in-page **debug panel** for the browser — see every `fetch()` request/
 - 🐢 **Throttle slider** — add artificial latency to every fetch to reproduce slow networks, spinners and timeouts
 - 🧹 **Cache-clear button** — wipe `localStorage`, `sessionStorage`, Cache Storage & service workers in one click
 - 📱 **Device viewport switcher** — mobile / tablet / desktop icons rewrite the page's `<meta name="viewport">` to emulate device widths (real devices & simulators)
+- 🧮 **JSON grid view** — flip any request/response body from raw text to a sortable **grid**: a column per key for arrays of objects, clickable chips to **drill into** nested objects, and a breadcrumb to walk back up
 - 🔎 Filter each tab; click a request to inspect it
 - 📋 One-click **copy** — request body, response body, URL, console lines, or a full **Copy Debug Report** (method, URL, status, timing, bodies, console errors) for bug tickets
 - 🔒 Auto-redacts secrets; nothing leaves the browser
@@ -99,6 +100,37 @@ setThrottle(2000);        // delay every fetch by 2s (0 disables)
 await clearBrowserCache();
 ```
 
+## JSON grid view
+
+Request and response bodies render as text by default. When a body is an object
+or a non-empty array, a **RAW / GRID** switch appears in that pane's header.
+
+Grid mode picks a layout from the shape of the data:
+
+| Body shape | Grid |
+| --- | --- |
+| `[{...}, {...}]` | one column per key (union of all keys), one row per item |
+| `[1, 2, 3]` | index + value |
+| `{...}` | key + value |
+
+Nested objects and arrays render as `{ 3 }` / `[ 5 ]` chips — click one to drill
+in, and use the breadcrumb (`root › users › 2 › address`) to walk back up. On an
+array-of-objects table, clicking a column header cycles ascending → descending
+→ original order; the `#` column always shows the item's original index, so a
+row still drills into the right element after a sort.
+
+The grid is exported too, if you want it outside the panel:
+
+```ts
+import { renderJsonGrid, newGridState } from "@jasimvk/fetchlogger";
+
+const state = newGridState();
+const render = () => {
+  host.replaceChildren(renderJsonGrid(payload, state, render));
+};
+render();
+```
+
 ## Options
 
 | Option | Default | Description |
@@ -130,9 +162,11 @@ await clearBrowserCache();
 - `setThrottle(ms)` / `getThrottle()` — global artificial fetch latency.
 - `clearBrowserCache()` — clear localStorage, sessionStorage, Cache Storage & service workers.
 - `buildDebugReport(log, options?)` — paste-ready text report for a request.
+- `renderJsonGrid(value, state, onChange)` — render any JSON value as a drill-down grid element.
+- `newGridState()` / `isGriddable(value)` / `coerceJson(value)` — helpers for the grid.
 - `installConsoleLogger(options?) => () => void` — capture console output (no UI).
 - `subscribeConsole(fn)` / `getConsoleLogs()` / `clearConsoleLogs()` / `uninstallConsoleLogger()`
-- Types: `FetchLog`, `OverrideRule`, `ConsoleLog`, `ConsoleLevel`, `InstallOptions`, `ConsoleOptions`, `MountOptions`.
+- Types: `FetchLog`, `OverrideRule`, `ConsoleLog`, `ConsoleLevel`, `InstallOptions`, `ConsoleOptions`, `MountOptions`, `GridState`.
 
 ## How it works
 

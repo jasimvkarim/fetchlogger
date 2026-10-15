@@ -28,6 +28,12 @@ import {
   type ConsoleOptions,
 } from "./console";
 import { buildDebugReport } from "./report";
+import {
+  renderJsonGrid,
+  newGridState,
+  isGriddable,
+  type GridState,
+} from "./grid";
 
 export interface MountOptions extends InstallOptions, ConsoleOptions {
   /** Auto-install the fetch patch when mounting. Default true. */
@@ -146,6 +152,14 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
   let hidden = !options.defaultOpen;
   let selected: number | null = null;
   let urlExpanded = false;
+  // Grid view is per-side and sticky across re-renders: the panel rebuilds its
+  // whole tree on every fetch, so this can't live inside render().
+  const gridOn: Record<"req" | "res", boolean> = { req: false, res: false };
+  const gridState: Record<"req" | "res", GridState> = { req: newGridState(), res: newGridState() };
+  const resetGrids = () => {
+    gridState.req = newGridState();
+    gridState.res = newGridState();
+  };
   let filter = "";
   let tab: "network" | "console" | "mock" = "network";
   // Emulated device viewport (rewrites <meta name="viewport">). "desktop" is
@@ -600,7 +614,7 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
       row.appendChild(el("span", { color: "#e2e8f0", flex: "1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "10px" }, label));
       if (log.overridden) row.appendChild(el("span", { color: "#c084fc", fontSize: "8px", fontWeight: "bold", flexShrink: "0", border: "1px solid #7c3aed", borderRadius: "3px", padding: "0 3px" }, "MOCK"));
       if (log.elapsed !== undefined) row.appendChild(el("span", { color: "#c4b5fd", fontSize: "9px", flexShrink: "0" }, `${log.elapsed}ms`));
-      row.onclick = () => { selected = active ? null : log.id; urlExpanded = false; render(); };
+      row.onclick = () => { selected = active ? null : log.id; urlExpanded = false; resetGrids(); render(); };
       rows.appendChild(row);
     });
     list.appendChild(rows);
@@ -638,13 +652,39 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
       pane.appendChild(bar);
 
       const bodies = el("div", { display: "flex", flex: "1", overflow: "hidden", minHeight: "0" });
-      const mkSide = (title: string, titleColor: string, content: unknown, color: string, border: boolean) => {
+      const mkSide = (side_: "req" | "res", title: string, titleColor: string, content: unknown, color: string, border: boolean) => {
         const side = el("div", { flex: "1", display: "flex", flexDirection: "column", overflow: "hidden", borderRight: border ? "1px solid #334155" : "none" });
         const head = el("div", { display: "flex", alignItems: "center", gap: "6px", padding: "3px 8px", background: "rgba(22,32,50,0.7)", flexShrink: "0" });
         head.appendChild(el("span", { color: titleColor, fontSize: "10px", fontWeight: "bold", flex: "1" }, title));
+
+        // RAW / GRID switch — only where a table is an improvement on the text.
+        const griddable = isGriddable(content);
+        if (griddable) {
+          const wrap = el("div", { display: "flex", gap: "1px", background: "rgba(15,23,42,0.6)", borderRadius: "4px", padding: "1px", flexShrink: "0" });
+          const mkMode = (label: string, on: boolean) => {
+            const btn = el("span", {
+              cursor: "pointer", fontSize: "8px", fontWeight: "bold", padding: "1px 5px", borderRadius: "3px",
+              userSelect: "none", color: on ? "#0f172a" : "#cbd5e1", background: on ? "#a5b4fc" : "transparent",
+            }, label);
+            btn.onclick = (e) => { e.stopPropagation(); gridOn[side_] = label === "GRID"; render(); };
+            return btn;
+          };
+          wrap.appendChild(mkMode("RAW", !gridOn[side_]));
+          wrap.appendChild(mkMode("GRID", gridOn[side_]));
+          head.appendChild(wrap);
+        }
+
         const text = toText(content);
         if (text) head.appendChild(copyButton(() => text));
         side.appendChild(head);
+
+        if (griddable && gridOn[side_]) {
+          const grid = el("div", { flex: "1", overflow: "hidden", minHeight: "0", display: "flex" });
+          grid.appendChild(renderJsonGrid(content, gridState[side_], render));
+          side.appendChild(grid);
+          return side;
+        }
+
         const scroll = el("div", { flex: "1", overflowY: "auto", padding: "6px 8px" });
         const pre = el("pre", { margin: "0", color, whiteSpace: "pre-wrap", wordBreak: "break-all", fontSize: "10px" },
           content === undefined ? "— no body —" : typeof content === "string" ? content : JSON.stringify(content, null, 2));
@@ -652,8 +692,8 @@ export function mountFetchLoggerPanel(options: MountOptions = {}): () => void {
         side.appendChild(scroll);
         return side;
       };
-      bodies.appendChild(mkSide("↑ REQUEST", "#bfdbfe", detail.reqBody, "#bfdbfe", true));
-      bodies.appendChild(mkSide("↓ RESPONSE", "#a7f3d0", detail.error ? `ERROR: ${detail.error}` : detail.resBody, detail.error ? "#fca5a5" : "#a7f3d0", false));
+      bodies.appendChild(mkSide("req", "↑ REQUEST", "#bfdbfe", detail.reqBody, "#bfdbfe", true));
+      bodies.appendChild(mkSide("res", "↓ RESPONSE", "#a7f3d0", detail.error ? `ERROR: ${detail.error}` : detail.resBody, detail.error ? "#fca5a5" : "#a7f3d0", false));
       pane.appendChild(bodies);
       body.appendChild(pane);
     }

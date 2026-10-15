@@ -38,4 +38,14 @@ export {
 
 export { buildDebugReport, type DebugReportOptions } from "./report";
 
+// JSON grid view — exported so a host app can render a body as a drill-down
+// table outside the panel (a custom inspector, a bug-report page, etc.).
+export {
+  renderJsonGrid,
+  newGridState,
+  isGriddable,
+  coerceJson,
+  type GridState,
+} from "./grid";
+
 export { mountFetchLoggerPanel, type MountOptions } from "./panel";
